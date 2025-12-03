@@ -2,9 +2,8 @@ import socket
 import threading
 import time
 
-from protocol import PokeProtocol
+from .protocol import PokeProtocol
 
-# REQUIREMENT 3: Recommended timeout is 500ms, max retries is 3.
 RETRY_DELAY = 0.5
 MAX_RETRIES = 3
 BUFFER_SIZE = 65535

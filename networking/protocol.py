@@ -6,6 +6,9 @@ class PokeProtocol:
     def serialize(message_type, payload=None):
         """
         Converts a message type and a payload dictionary into the RFC format.
+        Format:
+        message_type: TYPE
+        key1: value1
         """
         if payload is None:
             payload = {}
@@ -13,7 +16,6 @@ class PokeProtocol:
         lines = [f"message_type: {message_type}"]
 
         for key, value in payload.items():
-            # if value is complex (dict/list), dump as JSON string
             if isinstance(value, (dict, list)):
                 value = json.dumps(value)
             lines.append(f"{key}: {value}")
@@ -24,7 +26,7 @@ class PokeProtocol:
     @staticmethod
     def deserialize(data_bytes):
         """
-        Parses raw bytes into a dictionary, with auto-type conversion.
+        Parses raw bytes into a dictionary.
         Returns (message_type, full_data_dict)
         """
         try:
@@ -36,23 +38,23 @@ class PokeProtocol:
                 if ": " in line:
                     key, value = line.split(": ", 1)
 
-                    # 1. Try processing as JSON (for dicts/lists like 'stats' or 'resistances')
+                    # 1. Try processing as JSON (for dicts/lists like 'stats')
                     if value.startswith("{") or value.startswith("["):
                         try:
                             value = json.loads(value)
                         except json.JSONDecodeError:
                             pass
 
-                    # 2. Try processing as Integer (e.g. 'hp', 'damage', '_seq')
+                    # 2. Try processing as Integer
                     else:
                         try:
                             value = int(value)
                         except ValueError:
-                            # 3. Try processing as Float (e.g. 'time')
+                            # 3. Try processing as Float
                             try:
                                 value = float(value)
                             except ValueError:
-                                pass  # Keep as string if it's text (e.g. 'name')
+                                pass
 
                     data[key] = value
 

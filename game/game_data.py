@@ -31,20 +31,13 @@ class Pokemon:
         else:
             self.moves = [("Struggle", 50, "Physical", "normal")]
 
-        # Nonce for Speed Ties
         self.nonce = random.randint(0, 1000000)
-
-        # RFC: Consumable Boosts (Start with 2 of each)
         self.stat_boosts = {"sp_attack": 2, "sp_defense": 2}
 
     def apply_boost(self, stat_name):
-        """Consumes a boost to multiply the stat by 1.5x"""
-        # Check if we have boosts left
         current_amount = self.stat_boosts.get(stat_name, 0)
-
         if current_amount > 0:
             self.stat_boosts[stat_name] -= 1
-
             if stat_name == "sp_attack":
                 self.sp_attack = int(self.sp_attack * 1.5)
                 print(f"[Boost] Special Attack rose to {self.sp_attack}!")
@@ -90,7 +83,6 @@ def calculate_damage(
 ):
     cat = move_category.lower()
 
-    # RFC Logic: Use modified stats (which might be boosted now)
     if cat == "physical":
         atk = attacker.attack
         defn = defender_dict["stats"]["defense"]
@@ -106,7 +98,6 @@ def calculate_damage(
     raw_damage = float(move_power) * ratio * effectiveness
     final_damage = math.ceil(raw_damage)
 
-    # Logs
     print(f"\n   [Math] Move: {move_name} ({cat})")
     print(f"   [Math] Stats ({stat_label}): {atk} / {defn} = {ratio:.2f}")
     print(
@@ -117,7 +108,7 @@ def calculate_damage(
     return final_damage, effectiveness
 
 
-def load_moves_map(filename="moves.csv"):
+def load_moves_map(filename="assets/moves.csv"):
     moves_map = {}
     try:
         with open(filename, "r", encoding="utf-8") as f:
@@ -135,18 +126,22 @@ def load_moves_map(filename="moves.csv"):
                         moves_map[p_name] = []
                     moves_map[p_name].append(move_tuple)
     except FileNotFoundError:
+        print(f"[Error] Could not find {filename}")
         pass
     return moves_map
 
 
-def load_pokemon_db(poke_file="pokemon.csv", moves_file="moves.csv"):
+def load_pokemon_db(poke_file="assets/pokemon.csv", moves_file="assets/moves.csv"):
     moves_map = load_moves_map(moves_file)
     db = {}
-    with open(poke_file, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            p_name = row["name"].lower()
-            p_moves = moves_map.get(p_name, [])
-            p = Pokemon(row, p_moves)
-            db[p_name] = p
+    try:
+        with open(poke_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                p_name = row["name"].lower()
+                p_moves = moves_map.get(p_name, [])
+                p = Pokemon(row, p_moves)
+                db[p_name] = p
+    except FileNotFoundError:
+        print(f"[Error] Could not find {poke_file}")
     return db

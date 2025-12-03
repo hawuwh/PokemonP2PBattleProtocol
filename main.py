@@ -4,9 +4,11 @@ import sys
 import threading
 import time
 
-from chat_utils import ChatManager
-from game_data import calculate_damage, get_effectiveness_text, load_pokemon_db
-from network import DiscoveryManager, ReliableTransport
+from game.chat_utils import ChatManager
+from game.game_data import calculate_damage, get_effectiveness_text, load_pokemon_db
+
+# UPDATED IMPORTS
+from networking.network import DiscoveryManager, ReliableTransport
 
 
 # Input Handler
@@ -71,7 +73,7 @@ class P2PGame:
                     print("Invalid choice.")
             time.sleep(0.1)
 
-        print("\n[Tip] Type '/chat <msg>' or '/sticker <file>' anytime.")
+        print("\n[Tip] Type '/chat <msg>' or '/sticker <file>' anytime.\n")
 
         while self.running:
             try:
@@ -93,7 +95,6 @@ class P2PGame:
         self.net = ReliableTransport(port=8888, verbose=True)
         self.net.start(self.handle_message)
 
-        # Start Broadcasting Presence
         self.discovery.start_broadcast()
         print("[Host] Waiting for players (Broadcasting on LAN)...")
 
@@ -181,7 +182,6 @@ class P2PGame:
         print(f"Attack:    {s['attack']:<5} Sp. Atk: {s['sp_attack']}")
         print(f"Defense:   {s['defense']:<5} Sp. Def: {s['sp_defense']}")
         print(f"Speed:     {s['speed']}")
-        # RFC Boost Display
         boosts = p_data.get("stat_boosts", {})
         if boosts:
             print(
@@ -190,7 +190,6 @@ class P2PGame:
         print("=" * 34)
 
     def show_pokemon_list(self):
-        """Displays all Pokemon with pagination (scrolling)."""
         names = sorted(list(self.pokemon_db.keys()))
         page_size = 20
         total = len(names)
@@ -204,21 +203,16 @@ class P2PGame:
 
             if i + page_size < total:
                 print(f"\n-- Press ENTER for next page (or type 'q' to stop) --")
-
-                # Wait for user input to scroll
                 stop_listing = False
                 while True:
                     user_in = self.input_handler.get_input()
                     if user_in is not None:
-                        # Allow chatting while looking at list
                         if self.handle_chat_input(user_in):
                             continue
-
                         if user_in.strip().lower() == "q":
                             stop_listing = True
                         break
                     time.sleep(0.1)
-
                 if stop_listing:
                     break
 
@@ -228,8 +222,6 @@ class P2PGame:
     def perform_setup(self):
         if self.my_pokemon is not None:
             return
-
-        # Stop broadcasting once we are setting up (someone joined)
         self.discovery.stop_broadcast()
 
         print("\n--- Choose your Pokemon ---")
@@ -240,7 +232,6 @@ class P2PGame:
             if user_in:
                 if self.handle_chat_input(user_in):
                     continue
-
                 name = user_in.strip().lower()
 
                 if name == "list":
@@ -295,6 +286,11 @@ class P2PGame:
                 break
 
     def check_game_over(self):
+        if self.my_pokemon.hp < 0:
+            self.my_pokemon.hp = 0
+        if self.opp_pokemon["hp"] < 0:
+            self.opp_pokemon["hp"] = 0
+
         if self.my_pokemon.hp <= 0:
             print("\n=== GAME OVER: YOU FAINTED! ===")
             self.net.send_reliable("GAME_OVER", {"winner": self.opp_pokemon["name"]})
@@ -329,7 +325,7 @@ class P2PGame:
                     return
                 elif user_in.strip() == "2":
                     if self.menu_boost():
-                        return  # If used, end turn. If canceled, loops back.
+                        return
                     else:
                         print("Select Action: [1] Attack, [2] Boost")
             time.sleep(0.1)
@@ -397,7 +393,6 @@ class P2PGame:
         category = "Status" if is_boost else move[2]
         m_type = "normal" if is_boost else move[3]
 
-        # STEP 1
         print(f"[RFC] Sending ATTACK_ANNOUNCE...")
         self.net.send_reliable(
             "ATTACK_ANNOUNCE",
@@ -409,10 +404,8 @@ class P2PGame:
             },
         )
 
-        # STEP 2
         self.wait_for_packet(["DEFENSE_ANNOUNCE"])
 
-        # STEP 3
         if is_boost:
             dmg, eff = 0, 1.0
             status_msg = f"{self.my_pokemon.name} {boost_msg}"
@@ -423,7 +416,7 @@ class P2PGame:
             status_msg = f"{self.my_pokemon.name} used {move_name}! {get_effectiveness_text(eff)}"
 
         self.pending_damage = dmg
-        new_opp_hp = self.opp_pokemon["hp"] - dmg
+        new_opp_hp = max(0, self.opp_pokemon["hp"] - dmg)
 
         print(f"[RFC] Sending CALCULATION_REPORT ({dmg} dmg)...")
         self.net.send_reliable(
@@ -438,7 +431,6 @@ class P2PGame:
             },
         )
 
-        # STEP 4
         self.wait_for_packet(["CALCULATION_CONFIRM"])
 
         self.opp_pokemon["hp"] = new_opp_hp
@@ -485,7 +477,7 @@ class P2PGame:
         self.net.send_reliable("CALCULATION_CONFIRM", {})
 
         print(f"[Result] You took {self.pending_damage} damage!")
-        self.my_pokemon.hp -= self.pending_damage
+        self.my_pokemon.hp = max(0, self.my_pokemon.hp - self.pending_damage)
         print(f"[Status] HP: {self.my_pokemon.hp}/{self.my_pokemon.max_hp}")
 
         if self.check_game_over():
@@ -534,60 +526,6 @@ class P2PGame:
             "GAME_OVER",
         ]:
             self.battle_queue.put((msg_type, payload))
-
-    # --- Discovery Integration ---
-    def role_host(self):
-        print(f"[Host] Starting on port 8888...")
-        self.net = ReliableTransport(port=8888, verbose=True)
-        self.net.start(self.handle_message)
-        self.discovery.start_broadcast()
-        print("[Host] Waiting for players (Broadcasting on LAN)...")
-
-    def role_join_direct(self):
-        self.net = ReliableTransport(port=0, verbose=True)
-        self.net.start(self.handle_message)
-        print("Enter Host IP (127.0.0.1):")
-        while True:
-            ip_in = self.input_handler.get_input()
-            if ip_in is not None:
-                ip = ip_in.strip() or "127.0.0.1"
-                break
-            time.sleep(0.1)
-        self.net.set_peer(ip, 8888)
-        self.net.send_reliable("HANDSHAKE_REQUEST", {})
-
-    def role_join_scan(self):
-        self.net = ReliableTransport(port=0, verbose=True)
-        self.net.start(self.handle_message)
-
-        found = self.discovery.scan_for_games()
-
-        if not found:
-            print("[Scan] No games found. Defaulting to 127.0.0.1")
-            ip = "127.0.0.1"
-        else:
-            print("\nAvailable Games:")
-            ips = list(found.keys())
-            for i, ip in enumerate(ips):
-                print(f"[{i + 1}] {ip}")
-
-            print("Select Game # > ")
-            while True:
-                sel = self.input_handler.get_input()
-                if sel:
-                    try:
-                        idx = int(sel) - 1
-                        if 0 <= idx < len(ips):
-                            ip = ips[idx]
-                            break
-                        else:
-                            print("Invalid number.")
-                    except:
-                        pass
-                time.sleep(0.1)
-
-        self.net.set_peer(ip, 8888)
-        self.net.send_reliable("HANDSHAKE_REQUEST", {})
 
 
 if __name__ == "__main__":
