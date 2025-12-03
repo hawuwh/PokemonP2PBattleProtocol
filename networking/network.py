@@ -2,22 +2,31 @@ import socket
 import threading
 import time
 
-from protocol import PokeProtocol
+# Use relative import for package internal reference
+from .protocol import PokeProtocol
 
-# REQUIREMENT 3: Recommended timeout is 500ms, max retries is 3.
-RETRY_DELAY = 0.5
-MAX_RETRIES = 3
-BUFFER_SIZE = 65535
-DISCOVERY_PORT = 8890
+# Configuration for the reliability layer
+RETRY_DELAY = 0.5  # 500ms timeout before retransmission
+MAX_RETRIES = 3  # Maximum attempts before giving up
+BUFFER_SIZE = 65535  # Max UDP size to support sticker images
+DISCOVERY_PORT = 8890  # Dedicated port for LAN broadcast
 
 
 class ReliableTransport:
+    """
+    A wrapper around UDP sockets that implements a custom reliability layer.
+    Handles Sequence Numbers, ACKs, and Retransmissions.
+    """
+
     def __init__(self, port=0, verbose=False):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Allow reusing the address to prevent 'Address already in use' errors
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
         try:
             self.sock.bind(("0.0.0.0", port))
         except OSError:
+            # Fallback to a random port if the specific one is taken
             self.sock.bind(("0.0.0.0", 0))
 
         self.port = self.sock.getsockname()[1]
@@ -25,29 +34,37 @@ class ReliableTransport:
         self.verbose = verbose
         self.running = True
 
-        self.seq_num = 0
-        self.unacked_msgs = {}
-        self.lock = threading.Lock()
-        self.on_message = None
+        # Reliability state tracking
+        self.seq_num = 0  # Monotonic sequence number for outgoing messages
+        self.unacked_msgs = {}  # Buffer for messages waiting for ACK
+        self.lock = threading.Lock()  # Thread safety for message buffer
+        self.on_message = None  # Callback function for received messages
 
+        # Background threads for listening and reliability management
         self.listener = threading.Thread(target=self._listen_loop, daemon=True)
         self.retry_worker = threading.Thread(target=self._retry_loop, daemon=True)
 
     def start(self, on_message_callback):
+        """Starts the network threads."""
         self.on_message = on_message_callback
         self.listener.start()
         self.retry_worker.start()
         print(f"[Net] Listening on port {self.port}")
 
     def set_peer(self, ip, port):
+        """Sets the target address for outgoing messages."""
         self.peer_addr = (ip, int(port))
 
     def send_reliable(self, msg_type, payload):
+        """
+        Sends a message with reliability guarantees.
+        Assigns a sequence number and stores it for potential retransmission.
+        """
         with self.lock:
             seq = self.seq_num
             self.seq_num += 1
 
-            # REQUIREMENT 1: Every non-ACK message MUST include a sequence_number.
+            # Inject sequence number into payload for tracking
             payload["sequence_number"] = seq
 
             data = PokeProtocol.serialize(msg_type, payload)
@@ -58,7 +75,7 @@ class ReliableTransport:
                 )
                 return
 
-            # Store for retransmission
+            # Buffer the message for the retry loop
             self.unacked_msgs[seq] = {
                 "data": data,
                 "time": time.time(),
@@ -70,16 +87,18 @@ class ReliableTransport:
                 print(f"[Sent] {msg_type} (Seq: {seq})")
 
     def send_ack(self, seq_to_ack, addr):
-        # REQUIREMENT 2: Send an ACK message with the corresponding ack_number (sequence_number).
+        """Sends a lightweight ACK packet to confirm receipt."""
         ack_payload = {"sequence_number": seq_to_ack}
         data = PokeProtocol.serialize("ACK", ack_payload)
         self.sock.sendto(data, addr)
 
     def _send_raw(self, data):
+        """Helper to send bytes to the peer if address is set."""
         if self.peer_addr:
             self.sock.sendto(data, self.peer_addr)
 
     def _listen_loop(self):
+        """Background thread loop for receiving UDP packets."""
         while self.running:
             try:
                 data, addr = self.sock.recvfrom(BUFFER_SIZE)
@@ -88,8 +107,8 @@ class ReliableTransport:
                 if not msg_type:
                     continue
 
+                # Handle ACKs internally - remove from retry buffer
                 if msg_type == "ACK":
-                    # Process incoming ACKs
                     seq_acked = int(payload.get("sequence_number", -1))
                     with self.lock:
                         if seq_acked in self.unacked_msgs:
@@ -98,11 +117,12 @@ class ReliableTransport:
                             del self.unacked_msgs[seq_acked]
                     continue
 
-                # REQUIREMENT 2: Upon receiving a message... send an ACK.
+                # Automatically send ACK for any received reliable message
                 sender_seq = payload.get("sequence_number")
                 if sender_seq is not None:
                     self.send_ack(sender_seq, addr)
 
+                # Pass valid game messages up to the main application
                 if self.on_message:
                     self.on_message(msg_type, payload, addr)
 
@@ -111,10 +131,15 @@ class ReliableTransport:
                     print(f"[Net Error] {e}")
 
     def _retry_loop(self):
+        """
+        Background thread loop for reliability.
+        Checks for unacknowledged messages that have exceeded the timeout.
+        """
         while self.running:
-            time.sleep(0.1)
+            time.sleep(0.1)  # Check every 100ms
             with self.lock:
                 now = time.time()
+                # Iterate over copy to allow safe deletion
                 for seq, info in list(self.unacked_msgs.items()):
                     if now - info["time"] > RETRY_DELAY:
                         if info["retries"] < MAX_RETRIES:
@@ -130,7 +155,7 @@ class ReliableTransport:
 
 
 class DiscoveryManager:
-    """Handles Broadcast discovery for finding games on the LAN."""
+    """Handles UDP Broadcast for finding local games without needing IPs."""
 
     def __init__(self, game_port=8888):
         self.game_port = game_port
@@ -138,7 +163,7 @@ class DiscoveryManager:
         self.broadcast_thread = None
 
     def start_broadcast(self):
-        """Host Mode: Continuously announces presence."""
+        """Starts announcing presence on the LAN."""
         self.broadcasting = True
         self.broadcast_thread = threading.Thread(
             target=self._broadcast_loop, daemon=True
@@ -158,14 +183,14 @@ class DiscoveryManager:
         while self.broadcasting:
             try:
                 sock.sendto(msg, ("<broadcast>", DISCOVERY_PORT))
-                time.sleep(2)  # Announce every 2 seconds
+                time.sleep(2)  # Announce presence every 2 seconds
             except Exception as e:
                 print(f"[Discovery Error] {e}")
                 time.sleep(5)
 
     @staticmethod
     def scan_for_games(timeout=5):
-        """Joiner Mode: Listens for announcements."""
+        """Listens for Broadcast packets to find available hosts."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -175,7 +200,7 @@ class DiscoveryManager:
             return []
 
         sock.settimeout(1.0)
-        found_hosts = {}  # {ip: port}
+        found_hosts = {}
 
         start_time = time.time()
         print(f"[Discovery] Scanning for {timeout} seconds...")

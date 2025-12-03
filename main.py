@@ -4,10 +4,9 @@ import sys
 import threading
 import time
 
+# Import project modules
 from game.chat_utils import ChatManager
 from game.game_data import calculate_damage, get_effectiveness_text, load_pokemon_db
-
-# Import project modules
 from networking.network import DiscoveryManager, ReliableTransport
 
 
