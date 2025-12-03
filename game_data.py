@@ -1,0 +1,138 @@
+import csv
+import math
+import random
+
+
+class Pokemon:
+    def __init__(self, row, available_moves):
+        self.name = row["name"]
+        self.type1 = row["type1"]
+        self.type2 = row["type2"] if row["type2"] else None
+
+        # Stats
+        self.hp = int(row["hp"])
+        self.max_hp = int(row["hp"])
+        self.attack = int(row["attack"])
+        self.defense = int(row["defense"])
+        self.sp_attack = int(row["sp_attack"])
+        self.sp_defense = int(row["sp_defense"])
+        self.speed = int(row["speed"])
+
+        # Resistances
+        self.resistances = {
+            k.replace("against_", ""): float(v)
+            for k, v in row.items()
+            if k.startswith("against_")
+        }
+
+        # FIX: Load ALL moves, do not sample just 4.
+        if available_moves:
+            self.moves = available_moves
+        else:
+            self.moves = [("Struggle", 50, "Physical", "normal")]
+
+        # Nonce for Speed Ties
+        self.nonce = random.randint(0, 1000000)
+
+        # RFC Requirement: Stat Boosts (Consumables)
+        # Default allocation: 2 Special Attack boosts, 2 Special Defense boosts
+        self.stat_boosts = {"sp_attack": 2, "sp_defense": 2}
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "hp": self.hp,
+            "max_hp": self.max_hp,
+            "type1": self.type1,
+            "type2": self.type2,
+            "stats": {
+                "attack": self.attack,
+                "defense": self.defense,
+                "sp_attack": self.sp_attack,
+                "sp_defense": self.sp_defense,
+                "speed": self.speed,
+            },
+            "resistances": self.resistances,
+            "nonce": self.nonce,
+            "stat_boosts": self.stat_boosts,
+        }
+
+
+def get_effectiveness_text(multiplier):
+    if multiplier > 1.0:
+        return "It was super effective!"
+    elif multiplier == 0:
+        return "It had no effect..."
+    elif multiplier < 1.0:
+        return "It was not very effective..."
+    else:
+        return ""
+
+
+def calculate_damage(
+    attacker, defender_dict, move_name, move_power, move_category, move_type
+):
+    # 1. Determine Stats
+    cat = move_category.lower()
+    if cat == "physical":
+        atk = attacker.attack
+        defn = defender_dict["stats"]["defense"]
+        stat_label = "Atk/Def"
+    else:
+        atk = attacker.sp_attack
+        defn = defender_dict["stats"]["sp_defense"]
+        stat_label = "SpAtk/SpDef"
+
+    # 2. Effectiveness
+    effectiveness = defender_dict["resistances"].get(move_type.lower(), 1.0)
+
+    # 3. Calculation
+    ratio = atk / defn
+    raw_damage = float(move_power) * ratio * effectiveness
+    final_damage = math.ceil(raw_damage)
+
+    # --- MATH LOGS ---
+    print(f"\n   [Math] Move: {move_name} ({cat})")
+    print(f"   [Math] Stats ({stat_label}): {atk} / {defn} = {ratio:.2f}")
+    print(
+        f"   [Math] Formula: {move_power} * {ratio:.2f} * {effectiveness} = {raw_damage:.2f}"
+    )
+    print(f"   [Math] Final Damage: {final_damage}")
+    # -----------------
+
+    return final_damage, effectiveness
+
+
+def load_moves_map(filename="moves.csv"):
+    moves_map = {}
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                m_name = row["move_name"]
+                m_type = row["type"]
+                m_power = int(row["base_power"])
+                m_cat = row["damage_category"]
+                learners = row["learns_by_pokemon"].split(";")
+                move_tuple = (m_name, m_power, m_cat, m_type)
+                for pokemon in learners:
+                    p_name = pokemon.strip().lower()
+                    if p_name not in moves_map:
+                        moves_map[p_name] = []
+                    moves_map[p_name].append(move_tuple)
+    except FileNotFoundError:
+        pass
+    return moves_map
+
+
+def load_pokemon_db(poke_file="pokemon.csv", moves_file="moves.csv"):
+    moves_map = load_moves_map(moves_file)
+    db = {}
+    with open(poke_file, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            p_name = row["name"].lower()
+            p_moves = moves_map.get(p_name, [])
+            p = Pokemon(row, p_moves)
+            db[p_name] = p
+    return db

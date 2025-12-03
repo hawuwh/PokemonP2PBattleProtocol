@@ -1,0 +1,47 @@
+move_name,type,base_power,damage_category,learns_by_pokemon
+Tackle,normal,40,physical,pikachu;bulbasaur;charmander;squirtle;caterpie;weedle;pidgey;rattata;spearow;ekans;sandshrew;nidoran;clefairy;vulpix;jigglypuff;zubat;oddish;paras;venonat;diglett;meowth;psyduck;mankey;growlithe;poliwag;abra;machop;bellsprout;tentacool;geodude;ponyta;slowpoke;magnemite;farfetchd;doduo;seel;grimer;shellder;gastly;onix;drowzee;krabby;voltorb;exeggcute;cubone;hitmonlee;hitmonchan;lickitung;koffing;rhyhorn;chansey;tangela;kangaskhan;horsea;goldeen;staryu;scyther;electabuzz;magmar;pinsir;tauros;magikarp;lapras;ditto;eevee;porygon;omanyte;kabuto;aerodactyl;snorlax;articuno;zapdos;moltres;dratini;mewtwo;mew
+Thunderbolt,electric,90,special,pikachu;raichu;magnemite;magneton;voltorb;electrode;electabuzz;jolteon;zapdos
+Thunder,electric,110,special,pikachu;raichu;magnemite;magneton;zapdos;electabuzz
+Quick Attack,normal,40,physical,pikachu;raichu;eevee;vaporeon;jolteon;flareon;mewtwo
+Thundershock,electric,40,special,pikachu;magnemite;voltorb;electabuzz
+Vine Whip,grass,45,physical,bulbasaur;ivysaur;venusaur;bellsprout;weepinbell;victreebel;tangela
+Razor Leaf,grass,55,physical,bulbasaur;ivysaur;venusaur;oddish;gloom;vileplume;bellsprout;weepinbell;victreebel
+Solar Beam,grass,120,special,bulbasaur;ivysaur;venusaur;oddish;gloom;vileplume;paras;parasect;bellsprout;weepinbell;victreebel;exeggcute;exeggutor;tangela;mew
+Leech Seed,grass,1,special,bulbasaur;ivysaur;venusaur;oddish;gloom;vileplume;paras;parasect;bellsprout;weepinbell;victreebel;exeggcute;exeggutor
+Ember,fire,40,special,charmander;charmeleon;charizard;vulpix;ninetales;growlithe;arcanine;ponyta;rapidash;magmar;flareon;moltres
+Flamethrower,fire,90,special,charmander;charmeleon;charizard;vulpix;ninetales;growlithe;arcanine;ponyta;rapidash;magmar;flareon;moltres;mew
+Fire Blast,fire,110,special,charmander;charmeleon;charizard;ninetales;arcanine;rapidash;magmar;flareon;moltres;mew
+Fire Spin,fire,35,special,charmander;charmeleon;charizard;vulpix;ninetales;growlithe;arcanine;ponyta;rapidash;magmar;flareon;moltres
+Bubble,water,40,special,squirtle;wartortle;blastoise;psyduck;golduck;poliwag;poliwhirl;poliwrath;tentacool;tentacruel;slowpoke;slowbro;krabby;kingler;horsea;seadra
+Water Gun,water,40,special,squirtle;wartortle;blastoise;psyduck;golduck;poliwag;poliwhirl;poliwrath;tentacool;tentacruel;slowpoke;slowbro;seel;dewgong;shellder;cloyster;krabby;kingler;horsea;seadra;goldeen;seaking;staryu;starmie;vaporeon;omanyte;omastar;kabuto;kabutops
+Surf,water,90,special,squirtle;wartortle;blastoise;psyduck;golduck;poliwag;poliwhirl;poliwrath;tentacool;tentacruel;slowpoke;slowbro;seel;dewgong;shellder;cloyster;krabby;kingler;horsea;seadra;goldeen;seaking;staryu;starmie;lapras;vaporeon;omanyte;omastar;kabuto;kabutops;dratini;dragonair;dragonite;mew
+Hydro Pump,water,110,special,squirtle;wartortle;blastoise;psyduck;golduck;poliwag;poliwhirl;poliwrath;tentacool;tentacruel;slowpoke;slowbro;seel;dewgong;shellder;cloyster;krabby;kingler;horsea;seadra;goldeen;seaking;staryu;starmie;gyarados;lapras;vaporeon;omanyte;omastar;kabuto;kabutops
+Bite,dark,60,physical,charmander;charmeleon;charizard;squirtle;wartortle;blastoise;raticate;arbok;persian;growlithe;arcanine;gyarados;aerodactyl;dratini;dragonair;dragonite
+Scratch,normal,40,physical,charmander;charmeleon;charizard;sandshrew;sandslash;nidoran;nidorina;nidoqueen;vulpix;ninetales;meowth;persian;psyduck;golduck;mankey;primeape;diglett;dugtrio;paras;parasect
+Body Slam,normal,85,physical,pikachu;raichu;nidoqueen;nidoking;clefairy;clefable;jigglypuff;wigglytuff;persian;psyduck;golduck;mankey;primeape;growlithe;arcanine;poliwrath;machop;machoke;machamp;slowbro;muk;gengar;onix;drowzee;hypno;cubone;marowak;hitmonlee;hitmonchan;lickitung;rhydon;chansey;kangaskhan;tauros;gyarados;lapras;snorlax;dragonite;mewtwo;mew
+Hyper Beam,normal,150,special,pidgeot;raticate;fearow;arbok;raichu;nidoqueen;nidoking;clefable;ninetales;wigglytuff;vileplume;persian;golduck;arcanine;poliwrath;alakazam;machamp;victreebel;tentacruel;golem;rapidash;slowbro;magneton;dodrio;dewgong;muk;cloyster;gengar;exeggutor;marowak;hitmonlee;hitmonchan;lickitung;rhydon;chansey;kangaskhan;seaking;starmie;tauros;gyarados;lapras;vaporeon;jolteon;flareon;omastar;kabutops;aerodactyl;snorlax;articuno;zapdos;moltres;dragonite;mewtwo;mew
+Psychic,psychic,90,special,butterfree;clefairy;clefable;jigglypuff;wigglytuff;venonat;venomoth;psyduck;golduck;poliwag;poliwhirl;poliwrath;abra;kadabra;alakazam;slowpoke;slowbro;gastly;haunter;gengar;drowzee;hypno;exeggcute;exeggutor;chansey;staryu;starmie;mr mime;jynx;mewtwo;mew
+Shadow Ball,ghost,80,special,gastly;haunter;gengar;mewtwo;mew
+Ice Beam,ice,90,special,squirtle;wartortle;blastoise;nidoqueen;nidoking;clefairy;clefable;jigglypuff;wigglytuff;psyduck;golduck;poliwag;poliwhirl;poliwrath;tentacool;tentacruel;slowpoke;slowbro;seel;dewgong;shellder;cloyster;drowzee;hypno;krabby;kingler;chansey;horsea;seadra;goldeen;seaking;staryu;starmie;jynx;gyarados;lapras;vaporeon;omanyte;omastar;kabuto;kabutops;articuno;dratini;dragonair;dragonite;mewtwo;mew
+Blizzard,ice,110,special,squirtle;wartortle;blastoise;nidoqueen;nidoking;clefairy;clefable;jigglypuff;wigglytuff;psyduck;golduck;poliwag;poliwhirl;poliwrath;tentacool;tentacruel;slowpoke;slowbro;seel;dewgong;shellder;cloyster;krabby;kingler;horsea;seadra;goldeen;seaking;staryu;starmie;jynx;gyarados;lapras;vaporeon;omanyte;omastar;kabuto;kabutops;articuno;dratini;dragonair;dragonite;mewtwo;mew
+Earthquake,ground,100,physical,sandshrew;sandslash;nidoqueen;nidoking;diglett;dugtrio;geodude;graveler;golem;onix;cubone;marowak;rhyhorn;rhydon;kangaskhan;tauros;gyarados;aerodactyl;snorlax;dragonite;mewtwo;mew
+Rock Slide,rock,75,physical,geodude;graveler;golem;onix;rhyhorn;rhydon;omanyte;omastar;kabuto;kabutops;aerodactyl;mew
+Dragon Claw,dragon,80,physical,charmander;charmeleon;charizard;dragonite;dratini;dragonair
+Dragon Rage,dragon,40,special,charmander;charmeleon;charizard;gyarados;dratini;dragonair;dragonite
+Aerial Ace,flying,60,physical,pidgey;pidgeotto;pidgeot;spearow;fearow;zubat;golbat;farfetchd;doduo;dodrio;scyther;aerodactyl;articuno;zapdos;moltres;dragonite;mew
+Gust,flying,40,special,pidgey;pidgeotto;pidgeot;spearow;fearow;zubat;golbat;farfetchd;butterfree;venomoth;dragonite;mew
+Steel Wing,steel,70,physical,pidgey;pidgeotto;pidgeot;fearow;aerodactyl;articuno;zapdos;moltres;dragonite
+Poison Sting,poison,15,physical,weedle;kakuna;beedrill;ekans;arbok;nidoran;nidorina;nidoqueen;venonat;venomoth;tentacool;tentacruel
+Sludge Bomb,poison,90,special,bulbasaur;ivysaur;venusaur;ekans;arbok;nidoran;nidorina;nidoqueen;nidoran;nidorino;nidoking;oddish;gloom;vileplume;venonat;venomoth;bellsprout;weepinbell;victreebel;tentacool;tentacruel;grimer;muk;gastly;haunter;gengar;koffing;weezing;mew
+Bug Bite,bug,60,physical,caterpie;metapod;butterfree;weedle;kakuna;beedrill;paras;parasect;venonat;venomoth;scyther;pinsir
+Megahorn,bug,120,physical,pinsir
+Metal Claw,steel,50,physical,sandshrew;sandslash;krabby;kingler;scyther;kabutops
+Confusion,psychic,50,special,butterfree;venonat;venomoth;psyduck;golduck;slowpoke;slowbro;drowzee;hypno;exeggcute;exeggutor;starmie;mr mime;jynx;mewtwo;mew
+Dream Eater,psychic,100,special,drowzee;hypno;gastly;haunter;gengar;mewtwo;mew
+Pound,normal,40,physical,clefairy;clefable;jigglypuff;wigglytuff;psyduck;golduck;poliwag;poliwhirl;poliwrath;abra;kadabra;alakazam;slowpoke;slowbro;drowzee;hypno;chansey;kangaskhan;mr mime
+Karate Chop,fighting,50,physical,mankey;primeape;machop;machoke;machamp;hitmonlee;hitmonchan
+Low Kick,fighting,50,physical,mankey;primeape;machop;machoke;machamp;hitmonlee;hitmonchan;mewtwo;mew
+Seismic Toss,fighting,60,physical,mankey;primeape;machop;machoke;machamp;geodude;graveler;golem;onix;cubone;marowak;hitmonlee;hitmonchan;kangaskhan;mewtwo;mew
+Rock Throw,rock,50,physical,geodude;graveler;golem;onix;rhyhorn;rhydon;omanyte;omastar;kabuto;kabutops
+Rollout,rock,30,physical,geodude;graveler;golem;onix;voltorb;electrode;lickitung;koffing;weezing;snorlax
+Self-Destruct,normal,200,physical,geodude;graveler;golem;voltorb;electrode;koffing;weezing;mew
