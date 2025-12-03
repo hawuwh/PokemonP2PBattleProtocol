@@ -6,7 +6,7 @@ import time
 
 from chat_utils import ChatManager
 from game_data import calculate_damage, get_effectiveness_text, load_pokemon_db
-from network import ReliableTransport
+from network import DiscoveryManager, ReliableTransport
 
 
 # Input Handler
@@ -46,35 +46,30 @@ class P2PGame:
         self.turn_owner = None
         self.battle_queue = queue.Queue()
         self.pending_damage = 0
+        self.discovery = DiscoveryManager(game_port=8888)
 
     def start(self):
-        print("Select Role (host/join):")
+        print("\n=== POKE PROTOCOL BATTLE ===")
+        print("[1] Host Game (Direct & Broadcast)")
+        print("[2] Join Game (Direct IP)")
+        print("[3] Scan for Games (Broadcast)")
+
         while True:
-            role_in = self.input_handler.get_input()
-            if role_in:
-                role = role_in.strip().lower()
-                break
-            time.sleep(0.1)
-
-        if role == "host":
-            print(f"[Host] Starting on port 8888...")
-            self.net = ReliableTransport(port=8888, verbose=True)
-            self.net.start(self.handle_message)
-        elif role == "join":
-            self.net = ReliableTransport(port=0, verbose=True)
-            self.net.start(self.handle_message)
-            print("Enter Host IP (127.0.0.1):")
-            while True:
-                ip_in = self.input_handler.get_input()
-                if ip_in is not None:
-                    ip = ip_in.strip() or "127.0.0.1"
+            choice = self.input_handler.get_input()
+            if choice:
+                choice = choice.strip()
+                if choice == "1":
+                    self.role_host()
                     break
-                time.sleep(0.1)
-
-            self.net.set_peer(ip, 8888)
-            self.net.send_reliable("HANDSHAKE_REQUEST", {})
-        else:
-            return
+                elif choice == "2":
+                    self.role_join_direct()
+                    break
+                elif choice == "3":
+                    self.role_join_scan()
+                    break
+                else:
+                    print("Invalid choice.")
+            time.sleep(0.1)
 
         print("\n[Tip] Type '/chat <msg>' or '/sticker <file>' anytime.")
 
@@ -91,6 +86,62 @@ class P2PGame:
 
         if self.net:
             self.net.running = False
+        self.discovery.stop_broadcast()
+
+    def role_host(self):
+        print(f"[Host] Starting on port 8888...")
+        self.net = ReliableTransport(port=8888, verbose=True)
+        self.net.start(self.handle_message)
+
+        # Start Broadcasting Presence
+        self.discovery.start_broadcast()
+        print("[Host] Waiting for players (Broadcasting on LAN)...")
+
+    def role_join_direct(self):
+        self.net = ReliableTransport(port=0, verbose=True)
+        self.net.start(self.handle_message)
+        print("Enter Host IP (127.0.0.1):")
+        while True:
+            ip_in = self.input_handler.get_input()
+            if ip_in is not None:
+                ip = ip_in.strip() or "127.0.0.1"
+                break
+            time.sleep(0.1)
+        self.net.set_peer(ip, 8888)
+        self.net.send_reliable("HANDSHAKE_REQUEST", {})
+
+    def role_join_scan(self):
+        self.net = ReliableTransport(port=0, verbose=True)
+        self.net.start(self.handle_message)
+
+        found = self.discovery.scan_for_games()
+
+        if not found:
+            print("[Scan] No games found. Defaulting to 127.0.0.1")
+            ip = "127.0.0.1"
+        else:
+            print("\nAvailable Games:")
+            ips = list(found.keys())
+            for i, ip in enumerate(ips):
+                print(f"[{i + 1}] {ip}")
+
+            print("Select Game # > ")
+            while True:
+                sel = self.input_handler.get_input()
+                if sel:
+                    try:
+                        idx = int(sel) - 1
+                        if 0 <= idx < len(ips):
+                            ip = ips[idx]
+                            break
+                        else:
+                            print("Invalid number.")
+                    except:
+                        pass
+                time.sleep(0.1)
+
+        self.net.set_peer(ip, 8888)
+        self.net.send_reliable("HANDSHAKE_REQUEST", {})
 
     def handle_chat_input(self, user_input):
         if not user_input:
@@ -177,6 +228,10 @@ class P2PGame:
     def perform_setup(self):
         if self.my_pokemon is not None:
             return
+
+        # Stop broadcasting once we are setting up (someone joined)
+        self.discovery.stop_broadcast()
+
         print("\n--- Choose your Pokemon ---")
         print("Enter Pokemon Name (e.g. Charmander) or type 'list': ")
 
@@ -188,7 +243,6 @@ class P2PGame:
 
                 name = user_in.strip().lower()
 
-                # NEW: Check for list command
                 if name == "list":
                     self.show_pokemon_list()
                     continue
@@ -338,7 +392,6 @@ class P2PGame:
             time.sleep(0.1)
 
     def execute_attack_sequence(self, move, is_boost=False, boost_msg=""):
-        # If boosting, we treat it as a "Move" with 0 damage just to keep flow sync'd
         move_name = boost_msg if is_boost else move[0]
         power = 0 if is_boost else move[1]
         category = "Status" if is_boost else move[2]
@@ -481,6 +534,60 @@ class P2PGame:
             "GAME_OVER",
         ]:
             self.battle_queue.put((msg_type, payload))
+
+    # --- Discovery Integration ---
+    def role_host(self):
+        print(f"[Host] Starting on port 8888...")
+        self.net = ReliableTransport(port=8888, verbose=True)
+        self.net.start(self.handle_message)
+        self.discovery.start_broadcast()
+        print("[Host] Waiting for players (Broadcasting on LAN)...")
+
+    def role_join_direct(self):
+        self.net = ReliableTransport(port=0, verbose=True)
+        self.net.start(self.handle_message)
+        print("Enter Host IP (127.0.0.1):")
+        while True:
+            ip_in = self.input_handler.get_input()
+            if ip_in is not None:
+                ip = ip_in.strip() or "127.0.0.1"
+                break
+            time.sleep(0.1)
+        self.net.set_peer(ip, 8888)
+        self.net.send_reliable("HANDSHAKE_REQUEST", {})
+
+    def role_join_scan(self):
+        self.net = ReliableTransport(port=0, verbose=True)
+        self.net.start(self.handle_message)
+
+        found = self.discovery.scan_for_games()
+
+        if not found:
+            print("[Scan] No games found. Defaulting to 127.0.0.1")
+            ip = "127.0.0.1"
+        else:
+            print("\nAvailable Games:")
+            ips = list(found.keys())
+            for i, ip in enumerate(ips):
+                print(f"[{i + 1}] {ip}")
+
+            print("Select Game # > ")
+            while True:
+                sel = self.input_handler.get_input()
+                if sel:
+                    try:
+                        idx = int(sel) - 1
+                        if 0 <= idx < len(ips):
+                            ip = ips[idx]
+                            break
+                        else:
+                            print("Invalid number.")
+                    except:
+                        pass
+                time.sleep(0.1)
+
+        self.net.set_peer(ip, 8888)
+        self.net.send_reliable("HANDSHAKE_REQUEST", {})
 
 
 if __name__ == "__main__":

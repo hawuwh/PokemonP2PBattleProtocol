@@ -4,10 +4,11 @@ import time
 
 from protocol import PokeProtocol
 
-# constants
+# REQUIREMENT 3: Recommended timeout is 500ms, max retries is 3.
 RETRY_DELAY = 0.5
 MAX_RETRIES = 3
 BUFFER_SIZE = 65535
+DISCOVERY_PORT = 8890
 
 
 class ReliableTransport:
@@ -46,17 +47,18 @@ class ReliableTransport:
             seq = self.seq_num
             self.seq_num += 1
 
+            # REQUIREMENT 1: Every non-ACK message MUST include a sequence_number.
             payload["sequence_number"] = seq
 
             data = PokeProtocol.serialize(msg_type, payload)
 
-            # check size before sending
             if len(data) > BUFFER_SIZE:
                 print(
                     f"[Error] Message too large ({len(data)} bytes)! Max is {BUFFER_SIZE}."
                 )
                 return
 
+            # Store for retransmission
             self.unacked_msgs[seq] = {
                 "data": data,
                 "time": time.time(),
@@ -68,6 +70,7 @@ class ReliableTransport:
                 print(f"[Sent] {msg_type} (Seq: {seq})")
 
     def send_ack(self, seq_to_ack, addr):
+        # REQUIREMENT 2: Send an ACK message with the corresponding ack_number (sequence_number).
         ack_payload = {"sequence_number": seq_to_ack}
         data = PokeProtocol.serialize("ACK", ack_payload)
         self.sock.sendto(data, addr)
@@ -86,6 +89,7 @@ class ReliableTransport:
                     continue
 
                 if msg_type == "ACK":
+                    # Process incoming ACKs
                     seq_acked = int(payload.get("sequence_number", -1))
                     with self.lock:
                         if seq_acked in self.unacked_msgs:
@@ -94,6 +98,7 @@ class ReliableTransport:
                             del self.unacked_msgs[seq_acked]
                     continue
 
+                # REQUIREMENT 2: Upon receiving a message... send an ACK.
                 sender_seq = payload.get("sequence_number")
                 if sender_seq is not None:
                     self.send_ack(sender_seq, addr)
@@ -122,3 +127,73 @@ class ReliableTransport:
                                 f"[Timeout] Failed to deliver {info['type']} (Seq {seq})"
                             )
                             del self.unacked_msgs[seq]
+
+
+class DiscoveryManager:
+    """Handles Broadcast discovery for finding games on the LAN."""
+
+    def __init__(self, game_port=8888):
+        self.game_port = game_port
+        self.broadcasting = False
+        self.broadcast_thread = None
+
+    def start_broadcast(self):
+        """Host Mode: Continuously announces presence."""
+        self.broadcasting = True
+        self.broadcast_thread = threading.Thread(
+            target=self._broadcast_loop, daemon=True
+        )
+        self.broadcast_thread.start()
+
+    def stop_broadcast(self):
+        self.broadcasting = False
+
+    def _broadcast_loop(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+        msg = PokeProtocol.serialize("BROADCAST_ANNOUNCE", {"port": self.game_port})
+
+        print("[Discovery] Broadcasting game availability...")
+        while self.broadcasting:
+            try:
+                sock.sendto(msg, ("<broadcast>", DISCOVERY_PORT))
+                time.sleep(2)  # Announce every 2 seconds
+            except Exception as e:
+                print(f"[Discovery Error] {e}")
+                time.sleep(5)
+
+    @staticmethod
+    def scan_for_games(timeout=5):
+        """Joiner Mode: Listens for announcements."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("0.0.0.0", DISCOVERY_PORT))
+        except OSError:
+            print("[Discovery] Port busy. Cannot scan.")
+            return []
+
+        sock.settimeout(1.0)
+        found_hosts = {}  # {ip: port}
+
+        start_time = time.time()
+        print(f"[Discovery] Scanning for {timeout} seconds...")
+
+        while time.time() - start_time < timeout:
+            try:
+                data, addr = sock.recvfrom(1024)
+                msg_type, payload = PokeProtocol.deserialize(data)
+
+                if msg_type == "BROADCAST_ANNOUNCE":
+                    host_port = payload.get("port", 8888)
+                    if addr[0] not in found_hosts:
+                        found_hosts[addr[0]] = host_port
+                        print(f"  > Found Game at {addr[0]}:{host_port}")
+            except socket.timeout:
+                continue
+            except Exception:
+                pass
+
+        sock.close()
+        return found_hosts
