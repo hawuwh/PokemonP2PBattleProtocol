@@ -7,12 +7,12 @@ This project implements the PokeProtocol (RFC Specification) using Python and UD
 
 ## Features Implemented
 
-1. Networking & Reliability
+**1. Networking & Reliability**
     - Pure UDP
     - Implements a custom TCP-like layer over UDP using:
     - Broadcast Discovery
 
-2. Game Logic (RFC Compliant)
+**2. Game Logic (RFC Compliant)**
     - Strict turn-based flow (`LOBBY` -> `SETUP` -> `BATTLE`)
     - Every turn follows the strict RFC sequence:
         - Attacker declares move
@@ -22,7 +22,7 @@ This project implements the PokeProtocol (RFC Specification) using Python and UD
     - Damage calculation implements the specific formula: `Power * (Atk/Def) * TypeEffectiveness`.
     - Consumable items (X Special Attack/Defense) implemented as per RFC.
 
-3. Chat & Stickers
+**3. Chat & Stickers**
     - Chat operates on a separate thread, allowing users to chat while waiting for opponent moves.
     - Supports sending image files converted to Base64 strings.
 
