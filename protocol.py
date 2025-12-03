@@ -13,7 +13,7 @@ class PokeProtocol:
         lines = [f"message_type: {message_type}"]
 
         for key, value in payload.items():
-            # If value is complex (dict/list), dump as JSON string
+            # if value is complex (dict/list), dump as JSON string
             if isinstance(value, (dict, list)):
                 value = json.dumps(value)
             lines.append(f"{key}: {value}")

@@ -4,10 +4,9 @@ import time
 
 from protocol import PokeProtocol
 
-# Constants
+# constants
 RETRY_DELAY = 0.5
 MAX_RETRIES = 3
-# UPDATED: Increased to 65535 to support small images/stickers
 BUFFER_SIZE = 65535
 
 
@@ -51,7 +50,7 @@ class ReliableTransport:
 
             data = PokeProtocol.serialize(msg_type, payload)
 
-            # Check size before sending
+            # check size before sending
             if len(data) > BUFFER_SIZE:
                 print(
                     f"[Error] Message too large ({len(data)} bytes)! Max is {BUFFER_SIZE}."

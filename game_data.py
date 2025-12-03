@@ -25,7 +25,7 @@ class Pokemon:
             if k.startswith("against_")
         }
 
-        # FIX: Load ALL moves, do not sample just 4.
+        # Load ALL moves
         if available_moves:
             self.moves = available_moves
         else:
@@ -34,9 +34,25 @@ class Pokemon:
         # Nonce for Speed Ties
         self.nonce = random.randint(0, 1000000)
 
-        # RFC Requirement: Stat Boosts (Consumables)
-        # Default allocation: 2 Special Attack boosts, 2 Special Defense boosts
+        # RFC: Consumable Boosts (Start with 2 of each)
         self.stat_boosts = {"sp_attack": 2, "sp_defense": 2}
+
+    def apply_boost(self, stat_name):
+        """Consumes a boost to multiply the stat by 1.5x"""
+        # Check if we have boosts left
+        current_amount = self.stat_boosts.get(stat_name, 0)
+
+        if current_amount > 0:
+            self.stat_boosts[stat_name] -= 1
+
+            if stat_name == "sp_attack":
+                self.sp_attack = int(self.sp_attack * 1.5)
+                print(f"[Boost] Special Attack rose to {self.sp_attack}!")
+            elif stat_name == "sp_defense":
+                self.sp_defense = int(self.sp_defense * 1.5)
+                print(f"[Boost] Special Defense rose to {self.sp_defense}!")
+            return True
+        return False
 
     def to_dict(self):
         return {
@@ -72,8 +88,9 @@ def get_effectiveness_text(multiplier):
 def calculate_damage(
     attacker, defender_dict, move_name, move_power, move_category, move_type
 ):
-    # 1. Determine Stats
     cat = move_category.lower()
+
+    # RFC Logic: Use modified stats (which might be boosted now)
     if cat == "physical":
         atk = attacker.attack
         defn = defender_dict["stats"]["defense"]
@@ -83,22 +100,19 @@ def calculate_damage(
         defn = defender_dict["stats"]["sp_defense"]
         stat_label = "SpAtk/SpDef"
 
-    # 2. Effectiveness
     effectiveness = defender_dict["resistances"].get(move_type.lower(), 1.0)
 
-    # 3. Calculation
     ratio = atk / defn
     raw_damage = float(move_power) * ratio * effectiveness
     final_damage = math.ceil(raw_damage)
 
-    # --- MATH LOGS ---
+    # Logs
     print(f"\n   [Math] Move: {move_name} ({cat})")
     print(f"   [Math] Stats ({stat_label}): {atk} / {defn} = {ratio:.2f}")
     print(
         f"   [Math] Formula: {move_power} * {ratio:.2f} * {effectiveness} = {raw_damage:.2f}"
     )
     print(f"   [Math] Final Damage: {final_damage}")
-    # -----------------
 
     return final_damage, effectiveness
 

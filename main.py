@@ -9,13 +9,8 @@ from game_data import calculate_damage, get_effectiveness_text, load_pokemon_db
 from network import ReliableTransport
 
 
-# --- NEW: Threaded Input Handler ---
+# Input Handler
 class InputListener:
-    """
-    Reads user input in a background thread so the main game loop
-    doesn't freeze while waiting for 'input()'.
-    """
-
     def __init__(self):
         self.input_queue = queue.Queue()
         self.running = True
@@ -25,7 +20,6 @@ class InputListener:
     def _loop(self):
         while self.running:
             try:
-                # This blocks this specific thread, but not the main game
                 text = input()
                 self.input_queue.put(text)
             except EOFError:
@@ -34,7 +28,6 @@ class InputListener:
                 break
 
     def get_input(self):
-        """Non-blocking check for new input"""
         try:
             return self.input_queue.get_nowait()
         except queue.Empty:
@@ -46,21 +39,16 @@ class P2PGame:
         self.net = None
         self.pokemon_db = load_pokemon_db()
         self.running = True
-
-        # Initialize Async Input
         self.input_handler = InputListener()
-
         self.my_pokemon = None
         self.opp_pokemon = None
         self.state = "LOBBY"
         self.turn_owner = None
-
         self.battle_queue = queue.Queue()
         self.pending_damage = 0
 
     def start(self):
         print("Select Role (host/join):")
-        # We can use blocking input here since game hasn't started
         while True:
             role_in = self.input_handler.get_input()
             if role_in:
@@ -86,12 +74,9 @@ class P2PGame:
             self.net.set_peer(ip, 8888)
             self.net.send_reliable("HANDSHAKE_REQUEST", {})
         else:
-            print("Invalid role")
             return
 
-        print(
-            "\n[Tip] You can chat anytime by typing '/chat <msg>' or '/sticker <filename>'"
-        )
+        print("\n[Tip] Type '/chat <msg>' or '/sticker <file>' anytime.")
 
         while self.running:
             try:
@@ -108,10 +93,8 @@ class P2PGame:
             self.net.running = False
 
     def handle_chat_input(self, user_input):
-        """Returns True if input was a chat command, False if battle command."""
         if not user_input:
             return False
-
         if user_input.startswith("/chat "):
             msg = user_input[6:]
             self.net.send_reliable(
@@ -119,7 +102,6 @@ class P2PGame:
             )
             print(f"[Me]: {msg}")
             return True
-
         elif user_input.startswith("/sticker "):
             filepath = user_input[9:].strip()
             b64_data = ChatManager.encode_image(filepath)
@@ -130,7 +112,6 @@ class P2PGame:
                     {"sender": "Player", "type": "sticker", "content": b64_data},
                 )
             return True
-
         return False
 
     def print_stats(self, p_data, is_mine=False):
@@ -141,48 +122,89 @@ class P2PGame:
         print(f"\n{'=' * 10} {owner} {'=' * 10}")
         print(f"Name:      {p_data['name'].upper()}")
         print(f"HP:        {p_data['hp']} / {p_data['max_hp']}")
-
         type_str = p_data["type1"]
         if p_data["type2"]:
             type_str += f" / {p_data['type2']}"
         print(f"Type:      {type_str}")
-
         s = p_data["stats"]
         print(f"Attack:    {s['attack']:<5} Sp. Atk: {s['sp_attack']}")
         print(f"Defense:   {s['defense']:<5} Sp. Def: {s['sp_defense']}")
         print(f"Speed:     {s['speed']}")
+        # RFC Boost Display
+        boosts = p_data.get("stat_boosts", {})
+        if boosts:
+            print(
+                f"Boosts:    Sp.Atk ({boosts.get('sp_attack', 0)}) | Sp.Def ({boosts.get('sp_defense', 0)})"
+            )
         print("=" * 34)
+
+    def show_pokemon_list(self):
+        """Displays all Pokemon with pagination (scrolling)."""
+        names = sorted(list(self.pokemon_db.keys()))
+        page_size = 20
+        total = len(names)
+
+        print(f"\n--- Available Pokemon ({total}) ---")
+
+        for i in range(0, total, page_size):
+            chunk = names[i : i + page_size]
+            for name in chunk:
+                print(f"  {name.title()}")
+
+            if i + page_size < total:
+                print(f"\n-- Press ENTER for next page (or type 'q' to stop) --")
+
+                # Wait for user input to scroll
+                stop_listing = False
+                while True:
+                    user_in = self.input_handler.get_input()
+                    if user_in is not None:
+                        # Allow chatting while looking at list
+                        if self.handle_chat_input(user_in):
+                            continue
+
+                        if user_in.strip().lower() == "q":
+                            stop_listing = True
+                        break
+                    time.sleep(0.1)
+
+                if stop_listing:
+                    break
+
+        print("--- End of List ---")
+        print("Enter Pokemon Name (or 'list'): ")
 
     def perform_setup(self):
         if self.my_pokemon is not None:
             return
-
         print("\n--- Choose your Pokemon ---")
-        print("Enter Pokemon Name (e.g. Charmander): ")
+        print("Enter Pokemon Name (e.g. Charmander) or type 'list': ")
 
         while True:
-            # Non-blocking wait for input
             user_in = self.input_handler.get_input()
             if user_in:
                 if self.handle_chat_input(user_in):
                     continue
 
                 name = user_in.strip().lower()
+
+                # NEW: Check for list command
+                if name == "list":
+                    self.show_pokemon_list()
+                    continue
+
                 if name in self.pokemon_db:
                     self.my_pokemon = self.pokemon_db[name]
                     self.print_stats(self.my_pokemon, is_mine=True)
-                    print(f"Moves: {[m[0] for m in self.my_pokemon.moves]}")
-
                     self.net.send_reliable("BATTLE_SETUP", self.my_pokemon.to_dict())
                     print("\nWaiting for opponent...")
                     break
                 else:
-                    print("Invalid name. Try again.")
-
+                    print("Invalid name. Type 'list' to see options.")
             time.sleep(0.1)
 
         while self.opp_pokemon is None and self.running:
-            self.check_input_queue_for_chat()  # Allow chat while waiting
+            self.check_input_queue_for_chat()
             time.sleep(0.1)
 
         if self.running:
@@ -204,22 +226,17 @@ class P2PGame:
         elif opp_speed > my_speed:
             self.turn_owner = "opp"
         else:
-            if my_nonce > opp_nonce:
-                self.turn_owner = "me"
-            else:
-                self.turn_owner = "opp"
-
+            self.turn_owner = "me" if my_nonce > opp_nonce else "opp"
         print(
             f"[System] Result -> {'My' if self.turn_owner == 'me' else 'Opponent'} Turn"
         )
 
     def check_input_queue_for_chat(self):
-        """Helper to process any pending chats in the queue without blocking."""
         while True:
             user_in = self.input_handler.get_input()
             if user_in:
                 if not self.handle_chat_input(user_in):
-                    print(f"[System] Not your turn! You can only chat.")
+                    print(f"[System] Not your turn!")
             else:
                 break
 
@@ -244,24 +261,75 @@ class P2PGame:
             self.play_opp_turn()
 
     def play_my_turn(self):
-        print(f"\n[{self.my_pokemon.name} (HP: {self.my_pokemon.hp})] Select Move:")
-        for i, move in enumerate(self.my_pokemon.moves):
-            print(f"{i + 1}. {move[0]} (Pwr: {move[1]}, Type: {move[2]})")
-
-        print("Enter Move Number > ")
+        print(f"\n[{self.my_pokemon.name} (HP: {self.my_pokemon.hp})] Select Action:")
+        print("[1] Attack")
+        print("[2] Use Boost Item")
 
         while self.running:
             user_in = self.input_handler.get_input()
-
             if user_in:
                 if self.handle_chat_input(user_in):
                     continue
+                if user_in.strip() == "1":
+                    self.menu_attack()
+                    return
+                elif user_in.strip() == "2":
+                    if self.menu_boost():
+                        return  # If used, end turn. If canceled, loops back.
+                    else:
+                        print("Select Action: [1] Attack, [2] Boost")
+            time.sleep(0.1)
 
+    def menu_boost(self):
+        print("\nAvailable Boosts:")
+        print(
+            f"[1] X Special Attack (Left: {self.my_pokemon.stat_boosts['sp_attack']})"
+        )
+        print(
+            f"[2] X Special Defense (Left: {self.my_pokemon.stat_boosts['sp_defense']})"
+        )
+        print("[3] Cancel")
+
+        while self.running:
+            user_in = self.input_handler.get_input()
+            if user_in:
+                if self.handle_chat_input(user_in):
+                    continue
+                ch = user_in.strip()
+                if ch == "1":
+                    if self.my_pokemon.apply_boost("sp_attack"):
+                        self.execute_attack_sequence(
+                            None, is_boost=True, boost_msg="used X Special Attack!"
+                        )
+                        return True
+                    else:
+                        print("No boosts left!")
+                elif ch == "2":
+                    if self.my_pokemon.apply_boost("sp_defense"):
+                        self.execute_attack_sequence(
+                            None, is_boost=True, boost_msg="used X Special Defense!"
+                        )
+                        return True
+                    else:
+                        print("No boosts left!")
+                elif ch == "3":
+                    return False
+            time.sleep(0.1)
+
+    def menu_attack(self):
+        print("Select Move:")
+        for i, move in enumerate(self.my_pokemon.moves):
+            print(f"{i + 1}. {move[0]} (Pwr: {move[1]}, Type: {move[2]})")
+
+        while self.running:
+            user_in = self.input_handler.get_input()
+            if user_in:
+                if self.handle_chat_input(user_in):
+                    continue
                 try:
                     choice = int(user_in) - 1
                     if 0 <= choice < len(self.my_pokemon.moves):
-                        move = self.my_pokemon.moves[choice]
-                        self.execute_attack_sequence(move)
+                        self.execute_attack_sequence(self.my_pokemon.moves[choice])
                         return
                     else:
                         print("Invalid selection.")
@@ -269,49 +337,56 @@ class P2PGame:
                     pass
             time.sleep(0.1)
 
-    def execute_attack_sequence(self, move):
-        move_name = move[0]
+    def execute_attack_sequence(self, move, is_boost=False, boost_msg=""):
+        # If boosting, we treat it as a "Move" with 0 damage just to keep flow sync'd
+        move_name = boost_msg if is_boost else move[0]
+        power = 0 if is_boost else move[1]
+        category = "Status" if is_boost else move[2]
+        m_type = "normal" if is_boost else move[3]
 
-        # --- RFC Step 1: ATTACK_ANNOUNCE ---
-        print(f"[RFC] Sending ATTACK_ANNOUNCE: {move_name}...")
+        # STEP 1
+        print(f"[RFC] Sending ATTACK_ANNOUNCE...")
         self.net.send_reliable(
             "ATTACK_ANNOUNCE",
             {
                 "move_name": move_name,
-                "base_power": move[1],
-                "damage_category": move[2],
-                "move_type": move[3],
+                "base_power": power,
+                "damage_category": category,
+                "move_type": m_type,
             },
         )
 
-        # --- RFC Step 2: Wait for DEFENSE ---
-        msg_type, payload = self.wait_for_packet(["DEFENSE_ANNOUNCE"])
+        # STEP 2
+        self.wait_for_packet(["DEFENSE_ANNOUNCE"])
 
-        # --- RFC Step 3: CALCULATION ---
-        dmg, eff = calculate_damage(
-            self.my_pokemon, self.opp_pokemon, move_name, move[1], move[2], move[3]
-        )
+        # STEP 3
+        if is_boost:
+            dmg, eff = 0, 1.0
+            status_msg = f"{self.my_pokemon.name} {boost_msg}"
+        else:
+            dmg, eff = calculate_damage(
+                self.my_pokemon, self.opp_pokemon, move_name, power, category, m_type
+            )
+            status_msg = f"{self.my_pokemon.name} used {move_name}! {get_effectiveness_text(eff)}"
+
         self.pending_damage = dmg
-
         new_opp_hp = self.opp_pokemon["hp"] - dmg
-        eff_text = get_effectiveness_text(eff)
-        status_msg = f"{self.my_pokemon.name} used {move_name}! {eff_text}"
 
         print(f"[RFC] Sending CALCULATION_REPORT ({dmg} dmg)...")
+        self.net.send_reliable(
+            "CALCULATION_REPORT",
+            {
+                "attacker": self.my_pokemon.name,
+                "move_used": move_name,
+                "remaining_health": self.my_pokemon.hp,
+                "damage_dealt": dmg,
+                "defender_hp_remaining": new_opp_hp,
+                "status_message": status_msg,
+            },
+        )
 
-        report_payload = {
-            "attacker": self.my_pokemon.name,
-            "move_used": move_name,
-            "remaining_health": self.my_pokemon.hp,
-            "damage_dealt": dmg,
-            "defender_hp_remaining": new_opp_hp,
-            "status_message": status_msg,
-        }
-
-        self.net.send_reliable("CALCULATION_REPORT", report_payload)
-
-        # --- RFC Step 4: Wait for CONFIRM ---
-        msg_type, payload = self.wait_for_packet(["CALCULATION_CONFIRM"])
+        # STEP 4
+        self.wait_for_packet(["CALCULATION_CONFIRM"])
 
         self.opp_pokemon["hp"] = new_opp_hp
         print(f"[Result] Opponent HP: {self.opp_pokemon['hp']}")
@@ -333,22 +408,17 @@ class P2PGame:
 
     def play_opp_turn(self):
         print(f"\n[Opponent Turn] Waiting...")
-
-        # --- RFC Step 1: Wait for ATTACK ---
         msg_type, payload = self.wait_for_packet(["ATTACK_ANNOUNCE", "GAME_OVER"])
         if msg_type == "GAME_OVER":
             self.check_game_over()
             return
 
-        m_name = payload["move_name"]
-        print(f"[RFC] Opponent declared attack: {m_name}")
+        print(f"[RFC] Opponent declared: {payload['move_name']}")
 
-        # --- RFC Step 2: Send DEFENSE ---
         self.net.send_reliable(
             "DEFENSE_ANNOUNCE", {"hp": self.my_pokemon.hp, "status": "ready"}
         )
 
-        # --- RFC Step 3: Wait for REPORT ---
         msg_type, payload = self.wait_for_packet(["CALCULATION_REPORT"])
 
         damage = int(payload["damage_dealt"])
@@ -359,8 +429,6 @@ class P2PGame:
         print(f"**********************************************\n")
 
         self.pending_damage = damage
-
-        # --- RFC Step 4: Send CONFIRM ---
         self.net.send_reliable("CALCULATION_CONFIRM", {})
 
         print(f"[Result] You took {self.pending_damage} damage!")
@@ -369,22 +437,15 @@ class P2PGame:
 
         if self.check_game_over():
             return
-
         self.turn_owner = "me"
 
     def wait_for_packet(self, expected_types):
         while self.running:
-            # 1. Check if user typed a chat message
             user_in = self.input_handler.get_input()
             if user_in:
-                if not self.handle_chat_input(user_in):
-                    # If they typed a move number during opponent turn, ignore it
-                    pass
-
-            # 2. Check Network Queue
+                self.handle_chat_input(user_in)
             try:
                 msg_type, payload = self.battle_queue.get(timeout=0.1)
-
                 if msg_type in expected_types:
                     return msg_type, payload
                 elif msg_type == "GAME_OVER":
@@ -403,18 +464,15 @@ class P2PGame:
             self.state = "SETUP"
         elif msg_type == "BATTLE_SETUP":
             self.opp_pokemon = payload
-
         elif msg_type == "CHAT_MESSAGE":
             sender = payload.get("sender", "Peer")
             ctype = payload.get("type", "text")
             content = payload.get("content", "")
-
             if ctype == "text":
                 print(f"\n[CHAT] {sender}: {content}")
             elif ctype == "sticker":
                 filename = ChatManager.save_sticker(content, sender)
                 print(f"\n[CHAT] {sender} sent a sticker! Saved to {filename}")
-
         elif msg_type in [
             "ATTACK_ANNOUNCE",
             "DEFENSE_ANNOUNCE",
