@@ -3,7 +3,7 @@
 
 This project implements the PokeProtocol (RFC Specification) using Python and UDP sockets. It creates a robust, turn-based Peer-to-Peer (P2P) battle system with a custom reliability layer, broadcast discovery, and asynchronous chat functionality. 
 
-- Protocol Specification: 
+[RFC Protocol Specifications](https://docs.google.com/document/d/1rmI5kONoxxxjrNkilspUStmXXFjtcSW39dvrd6p7Sxg/edit?tab=t.0)
 
 ## Features Implemented
 
