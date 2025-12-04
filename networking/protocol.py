@@ -3,27 +3,23 @@ import json
 
 class PokeProtocol:
     """
-    Handles the serialization and deserialization of messages according to the RFC.
-    The protocol uses a simple newline-delimited key:value text format.
+    RFC 4.0: Message Format Implementation.
+    Handles serialization/deserialization of the key-value pair text format.
     """
 
     @staticmethod
     def serialize(message_type, payload=None):
         """
-        Converts a message type and payload dictionary into bytes.
-        Format follows the RFC specification:
-        message_type: TYPE
-        key1: value1
-        key2: value2
+        RFC 4.0: "All messages are plain text with newline-separated key: value pairs."
         """
         if payload is None:
             payload = {}
 
-        # Every message starts with the message_type header
+        # Header field required by protocol
         lines = [f"message_type: {message_type}"]
 
         for key, value in payload.items():
-            # complex objects like lists or dicts are JSON-encoded strings within the protocol
+            # Complex structures (arrays/objects) are serialized as JSON strings
             if isinstance(value, (dict, list)):
                 value = json.dumps(value)
             lines.append(f"{key}: {value}")
@@ -34,8 +30,8 @@ class PokeProtocol:
     @staticmethod
     def deserialize(data_bytes):
         """
-        Parses raw bytes received from the network into a dictionary.
-        Returns a tuple: (message_type, full_data_dict)
+        Parses the raw bytes into a python dictionary.
+        Handles type conversion for integers (e.g. HP, Damage) and JSON objects (e.g. Stats).
         """
         try:
             text = data_bytes.decode("utf-8")
@@ -43,18 +39,15 @@ class PokeProtocol:
             data = {}
 
             for line in lines:
-                # Only process lines that follow the key: value structure
                 if ": " in line:
                     key, value = line.split(": ", 1)
 
-                    # Attempt to parse nested JSON structures (e.g., stats, arrays)
+                    # Heuristic parsing for types
                     if value.startswith("{") or value.startswith("["):
                         try:
                             value = json.loads(value)
                         except json.JSONDecodeError:
-                            pass  # If parsing fails, treat it as a raw string
-
-                    # Attempt to convert numeric strings to integers or floats
+                            pass
                     else:
                         try:
                             value = int(value)
@@ -62,17 +55,15 @@ class PokeProtocol:
                             try:
                                 value = float(value)
                             except ValueError:
-                                pass  # Keep as string if it's text
+                                pass
 
                     data[key] = value
 
-            # Ensure the message has the required type field
             if "message_type" not in data:
                 return None, {}
 
             return data["message_type"], data
 
         except Exception as e:
-            # Catch parsing errors to prevent crashing on malformed packets
             print(f"[Protocol Error] Failed to parse: {e}")
             return None, {}

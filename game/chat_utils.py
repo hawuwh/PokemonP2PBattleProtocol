@@ -4,11 +4,17 @@ import time
 
 
 class ChatManager:
-    """Helper class for handling sticker encoding and file management."""
+    """
+    Handles functionality for RFC Section 6.0: Chat & Stickers.
+    Specifically deals with the Base64 encoding requirement for images.
+    """
 
     @staticmethod
     def encode_image(filepath):
-        """Reads an image file and converts it to a Base64 string for transmission."""
+        """
+        RFC 6.0: "Stickers are sent as Base64 encoded strings."
+        Reads a local file and converts it for transmission.
+        """
         try:
             with open(filepath, "rb") as image_file:
                 encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
@@ -22,7 +28,9 @@ class ChatManager:
 
     @staticmethod
     def save_sticker(base64_string, sender_name):
-        """Decodes a received Base64 string and saves it as a timestamped PNG file."""
+        """
+        Decodes incoming sticker data and saves to disk.
+        """
         try:
             timestamp = int(time.time())
             filename = f"sticker_{sender_name}_{timestamp}.png"

@@ -4,14 +4,17 @@ import random
 
 
 class Pokemon:
-    """Represents a Pokemon entity with stats, moves, and battle state."""
+    """
+    Data model for a Pokemon entity.
+    Stores stats, moves, and handles stat modifications (RFC 5.0).
+    """
 
     def __init__(self, row, available_moves):
         self.name = row["name"]
         self.type1 = row["type1"]
         self.type2 = row["type2"] if row["type2"] else None
 
-        # Base Stats
+        # RFC 5.0: Base Stats (HP, Attack, Defense, Sp. Atk, Sp. Def, Speed)
         self.hp = int(row["hp"])
         self.max_hp = int(row["hp"])
         self.attack = int(row["attack"])
@@ -20,31 +23,29 @@ class Pokemon:
         self.sp_defense = int(row["sp_defense"])
         self.speed = int(row["speed"])
 
-        # Load type effectiveness dictionary from CSV columns
+        # Pre-calculated type effectiveness from CSV (optimization for Type1 * Type2)
         self.resistances = {
             k.replace("against_", ""): float(v)
             for k, v in row.items()
             if k.startswith("against_")
         }
 
-        # Assign move pool
         if available_moves:
             self.moves = available_moves
         else:
             # Fallback move if database has no entries for this Pokemon
             self.moves = [("Struggle", 50, "Physical", "normal")]
 
-        # Cryptographic nonce used to resolve speed ties deterministically
+        # RFC Abstract: Speed Tie Resolution
+        # Random nonce generated at setup to deterministically resolve ties.
         self.nonce = random.randint(0, 1000000)
 
-        # Initialize consumable stat boosts
+        # RFC 5.0: Stat Boosts
+        # "An object containing the player's allocation of... special attack and special defense uses."
         self.stat_boosts = {"sp_attack": 2, "sp_defense": 2}
 
     def apply_boost(self, stat_name):
-        """
-        Consumes a boost item to increase a specific stat by 1.5x.
-        Returns True if successful, False if no items remain.
-        """
+        """RFC 5.0: Consumable resource logic for modifying battle stats."""
         current_amount = self.stat_boosts.get(stat_name, 0)
         if current_amount > 0:
             self.stat_boosts[stat_name] -= 1
@@ -58,7 +59,7 @@ class Pokemon:
         return False
 
     def to_dict(self):
-        """Serializes the Pokemon state for network transmission."""
+        """Serializes Pokemon data for BATTLE_SETUP (RFC 4.2)."""
         return {
             "name": self.name,
             "hp": self.hp,
@@ -94,12 +95,12 @@ def calculate_damage(
     attacker, defender_dict, move_name, move_power, move_category, move_type
 ):
     """
-    Calculates damage using the RFC formula:
-    Damage = BasePower * (Attack / Defense) * Effectiveness
+    RFC 5.0: Damage Calculation Formula.
+    Damage = BasePower * (AttackerStat / DefenderStat) * Type1Eff * Type2Eff
     """
     cat = move_category.lower()
 
-    # Determine which stats to use based on move category
+    # RFC 5.0: Select stats based on Physical/Special category
     if cat == "physical":
         atk = attacker.attack
         defn = defender_dict["stats"]["defense"]
@@ -109,15 +110,15 @@ def calculate_damage(
         defn = defender_dict["stats"]["sp_defense"]
         stat_label = "SpAtk/SpDef"
 
-    # Retrieve pre-calculated effectiveness from defender's data
+    # RFC 5.0: Type Effectiveness (Product of Type1 and Type2 effectiveness)
+    # Note: 'resistances' from CSV already contains the pre-calculated product.
     effectiveness = defender_dict["resistances"].get(move_type.lower(), 1.0)
 
-    # Execute the formula
+    # The Core Formula
     ratio = atk / defn
     raw_damage = float(move_power) * ratio * effectiveness
     final_damage = math.ceil(raw_damage)
 
-    # Debug output for verification
     print(f"\n   [Math] Move: {move_name} ({cat})")
     print(f"   [Math] Stats ({stat_label}): {atk} / {defn} = {ratio:.2f}")
     print(
@@ -139,11 +140,8 @@ def load_moves_map(filename="assets/moves.csv"):
                 m_type = row["type"]
                 m_power = int(row["base_power"])
                 m_cat = row["damage_category"]
-                # 'learns_by_pokemon' is a semicolon-separated list of names
                 learners = row["learns_by_pokemon"].split(";")
-
                 move_tuple = (m_name, m_power, m_cat, m_type)
-
                 for pokemon in learners:
                     p_name = pokemon.strip().lower()
                     if p_name not in moves_map:

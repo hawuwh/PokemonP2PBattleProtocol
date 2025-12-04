@@ -1,18 +1,21 @@
 
+
 # P2P Pokémon Battle Protocol (PokeProtocol) 
 
 This project implements the PokeProtocol (RFC Specification) using Python and UDP sockets. It creates a robust, turn-based Peer-to-Peer (P2P) battle system with a custom reliability layer, broadcast discovery, and asynchronous chat functionality. 
+
+This project was created with the help of Gemini AI, which assisted in debugging, troubleshooting, and implementing the game logic.
 
 [RFC Protocol Specifications](https://docs.google.com/document/d/1rmI5kONoxxxjrNkilspUStmXXFjtcSW39dvrd6p7Sxg/edit?tab=t.0)
 
 ## Features Implemented
 
-1. Networking & Reliability
+1. **Networking & Reliability**
     - Pure UDP
     - Implements a custom TCP-like layer over UDP using:
     - Broadcast Discovery
 
-2. Game Logic (RFC Compliant)
+2. **Game Logic (RFC Compliant)**
     - Strict turn-based flow (`LOBBY` -> `SETUP` -> `BATTLE`)
     - Every turn follows the strict RFC sequence:
         - Attacker declares move
@@ -22,7 +25,7 @@ This project implements the PokeProtocol (RFC Specification) using Python and UD
     - Damage calculation implements the specific formula: `Power * (Atk/Def) * TypeEffectiveness`.
     - Consumable items (X Special Attack/Defense) implemented as per RFC.
 
-3. Chat & Stickers
+3. **Chat & Stickers**
     - Chat operates on a separate thread, allowing users to chat while waiting for opponent moves.
     - Supports sending image files converted to Base64 strings.
 

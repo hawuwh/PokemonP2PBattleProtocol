@@ -4,17 +4,15 @@ import sys
 import threading
 import time
 
-# Import project modules
 from game.chat_utils import ChatManager
 from game.game_data import calculate_damage, get_effectiveness_text, load_pokemon_db
+
+# Import project modules
 from networking.network import DiscoveryManager, ReliableTransport
 
 
 class InputListener:
-    """
-    Handles user input in a separate background thread.
-    This prevents the main game loop (network/logic) from freezing while waiting for user input.
-    """
+    """Helper class for non-blocking console input to allow Async Chat (RFC 6.0)."""
 
     def __init__(self):
         self.input_queue = queue.Queue()
@@ -23,9 +21,10 @@ class InputListener:
         self.thread.start()
 
     def _loop(self):
-        """Continuous loop reading stdin."""
         while self.running:
             try:
+                # This blocks waiting for input, but since it's a daemon thread,
+                # it won't prevent the main program from exiting if we let it.
                 text = input()
                 self.input_queue.put(text)
             except EOFError:
@@ -34,7 +33,6 @@ class InputListener:
                 break
 
     def get_input(self):
-        """Non-blocking retrieval of the latest input."""
         try:
             return self.input_queue.get_nowait()
         except queue.Empty:
@@ -43,8 +41,8 @@ class InputListener:
 
 class P2PGame:
     """
-    Main Application Class.
-    Manages the Game State Machine, UI interactions, and Network integration.
+    Main State Machine Controller (RFC Abstract).
+    Manages transitions: LOBBY -> SETUP -> BATTLE -> GAME_OVER.
     """
 
     def __init__(self):
@@ -53,19 +51,16 @@ class P2PGame:
         self.running = True
         self.input_handler = InputListener()
 
-        # Battle State
         self.my_pokemon = None
         self.opp_pokemon = None
-        self.state = "LOBBY"  # LOBBY -> SETUP -> BATTLE
+        self.state = "LOBBY"
         self.turn_owner = None
 
-        # Queue to handle incoming RFC messages sequentially
         self.battle_queue = queue.Queue()
         self.pending_damage = 0
         self.discovery = DiscoveryManager(game_port=8888)
 
     def start(self):
-        """Main entry point for the CLI interface."""
         print("\n=== POKE PROTOCOL BATTLE ===")
         print("[1] Host Game (Direct & Broadcast)")
         print("[2] Join Game (Direct IP)")
@@ -90,7 +85,6 @@ class P2PGame:
 
         print("\n[Tip] Type '/chat <msg>' or '/sticker <file>' anytime.")
 
-        # Main Game Loop
         while self.running:
             try:
                 if self.state == "LOBBY":
@@ -102,22 +96,36 @@ class P2PGame:
             except KeyboardInterrupt:
                 break
 
-        # Cleanup
         if self.net:
             self.net.running = False
         self.discovery.stop_broadcast()
 
+    # --- NEW METHOD: Safe Exit Wait ---
+    def wait_for_exit(self):
+        """
+        Waits for the user to press Enter before closing the window.
+        Reuses the existing input thread to avoid race conditions with standard input().
+        """
+        print("\nPress Enter to exit...")
+
+        # 1. Flush any leftover input (e.g., keys pressed during Game Over screen)
+        while self.input_handler.get_input() is not None:
+            pass
+
+        # 2. Wait for a fresh keypress
+        while True:
+            if self.input_handler.get_input() is not None:
+                break
+            time.sleep(0.1)
+
     def role_host(self):
-        """Initializes the application as a Host."""
         print(f"[Host] Starting on port 8888...")
         self.net = ReliableTransport(port=8888, verbose=True)
         self.net.start(self.handle_message)
-
         self.discovery.start_broadcast()
         print("[Host] Waiting for players (Broadcasting on LAN)...")
 
     def role_join_direct(self):
-        """Initializes as a Client joining a specific IP."""
         self.net = ReliableTransport(port=0, verbose=True)
         self.net.start(self.handle_message)
         print("Enter Host IP (127.0.0.1):")
@@ -128,13 +136,12 @@ class P2PGame:
                 break
             time.sleep(0.1)
         self.net.set_peer(ip, 8888)
+        # RFC 3.1: Connection Establishment (Handshake)
         self.net.send_reliable("HANDSHAKE_REQUEST", {})
 
     def role_join_scan(self):
-        """Initializes as a Client and scans for local hosts."""
         self.net = ReliableTransport(port=0, verbose=True)
         self.net.start(self.handle_message)
-
         found = self.discovery.scan_for_games()
 
         if not found:
@@ -145,7 +152,6 @@ class P2PGame:
             ips = list(found.keys())
             for i, ip in enumerate(ips):
                 print(f"[{i + 1}] {ip}")
-
             print("Select Game # > ")
             while True:
                 sel = self.input_handler.get_input()
@@ -162,14 +168,15 @@ class P2PGame:
                 time.sleep(0.1)
 
         self.net.set_peer(ip, 8888)
+        # RFC 3.1: Connection Establishment
         self.net.send_reliable("HANDSHAKE_REQUEST", {})
 
     def handle_chat_input(self, user_input):
-        """Checks if input is a command (/chat or /sticker) and handles it."""
         if not user_input:
             return False
         if user_input.startswith("/chat "):
             msg = user_input[6:]
+            # RFC 6.0: Chat Message Format
             self.net.send_reliable(
                 "CHAT_MESSAGE", {"sender": "Player", "type": "text", "content": msg}
             )
@@ -188,7 +195,6 @@ class P2PGame:
         return False
 
     def print_stats(self, p_data, is_mine=False):
-        """Formatted display of Pokemon stats."""
         owner = "YOUR POKEMON" if is_mine else "OPPONENT POKEMON"
         if hasattr(p_data, "to_dict"):
             p_data = p_data.to_dict()
@@ -212,18 +218,14 @@ class P2PGame:
         print("=" * 34)
 
     def show_pokemon_list(self):
-        """Displays all available Pokemon with pagination."""
         names = sorted(list(self.pokemon_db.keys()))
         page_size = 20
         total = len(names)
-
         print(f"\n--- Available Pokemon ({total}) ---")
-
         for i in range(0, total, page_size):
             chunk = names[i : i + page_size]
             for name in chunk:
                 print(f"  {name.title()}")
-
             if i + page_size < total:
                 print(f"\n-- Press ENTER for next page (or type 'q' to stop) --")
                 stop_listing = False
@@ -238,33 +240,29 @@ class P2PGame:
                     time.sleep(0.1)
                 if stop_listing:
                     break
-
         print("--- End of List ---")
         print("Enter Pokemon Name (or 'list'): ")
 
     def perform_setup(self):
-        """Handles the Pokemon selection phase."""
         if self.my_pokemon is not None:
             return
         self.discovery.stop_broadcast()
 
         print("\n--- Choose your Pokemon ---")
         print("Enter Pokemon Name (e.g. Charmander) or type 'list': ")
-
         while True:
             user_in = self.input_handler.get_input()
             if user_in:
                 if self.handle_chat_input(user_in):
                     continue
                 name = user_in.strip().lower()
-
                 if name == "list":
                     self.show_pokemon_list()
                     continue
-
                 if name in self.pokemon_db:
                     self.my_pokemon = self.pokemon_db[name]
                     self.print_stats(self.my_pokemon, is_mine=True)
+                    # RFC 4.2: Battle Setup - Exchange Pokemon Data
                     self.net.send_reliable("BATTLE_SETUP", self.my_pokemon.to_dict())
                     print("\nWaiting for opponent...")
                     break
@@ -272,7 +270,6 @@ class P2PGame:
                     print("Invalid name. Type 'list' to see options.")
             time.sleep(0.1)
 
-        # Wait for opponent's data
         while self.opp_pokemon is None and self.running:
             self.check_input_queue_for_chat()
             time.sleep(0.1)
@@ -286,7 +283,10 @@ class P2PGame:
             self.state = "BATTLE"
 
     def determine_first_turn(self):
-        """Resolves turn order based on Speed and Nonce."""
+        """
+        RFC Abstract: Turn Order Determination.
+        Uses Speed stat, then Nonce for tie-breaking.
+        """
         my_speed = self.my_pokemon.speed
         opp_speed = self.opp_pokemon["stats"]["speed"]
         my_nonce = self.my_pokemon.nonce
@@ -303,7 +303,6 @@ class P2PGame:
         )
 
     def check_input_queue_for_chat(self):
-        """Helper to process chats when main loop is waiting."""
         while True:
             user_in = self.input_handler.get_input()
             if user_in:
@@ -313,8 +312,6 @@ class P2PGame:
                 break
 
     def check_game_over(self):
-        """Checks HP conditions for Victory/Defeat."""
-        # Clamp negative HP
         if self.my_pokemon.hp < 0:
             self.my_pokemon.hp = 0
         if self.opp_pokemon["hp"] < 0:
@@ -332,7 +329,6 @@ class P2PGame:
         return False
 
     def battle_loop(self):
-        """Main turn-based battle loop."""
         if self.state != "BATTLE":
             return
         if self.turn_owner == "me":
@@ -341,7 +337,6 @@ class P2PGame:
             self.play_opp_turn()
 
     def play_my_turn(self):
-        """Handles the local player's turn logic."""
         print(f"\n[{self.my_pokemon.name} (HP: {self.my_pokemon.hp})] Select Action:")
         print("[1] Attack")
         print("[2] Use Boost Item")
@@ -362,7 +357,6 @@ class P2PGame:
             time.sleep(0.1)
 
     def menu_boost(self):
-        """Displays available consumable boosts."""
         print("\nAvailable Boosts:")
         print(
             f"[1] X Special Attack (Left: {self.my_pokemon.stat_boosts['sp_attack']})"
@@ -371,7 +365,6 @@ class P2PGame:
             f"[2] X Special Defense (Left: {self.my_pokemon.stat_boosts['sp_defense']})"
         )
         print("[3] Cancel")
-
         while self.running:
             user_in = self.input_handler.get_input()
             if user_in:
@@ -399,11 +392,9 @@ class P2PGame:
             time.sleep(0.1)
 
     def menu_attack(self):
-        """Displays available attacks."""
         print("Select Move:")
         for i, move in enumerate(self.my_pokemon.moves):
             print(f"{i + 1}. {move[0]} (Pwr: {move[1]}, Type: {move[2]})")
-
         while self.running:
             user_in = self.input_handler.get_input()
             if user_in:
@@ -421,13 +412,16 @@ class P2PGame:
             time.sleep(0.1)
 
     def execute_attack_sequence(self, move, is_boost=False, boost_msg=""):
-        """Executes the RFC 4-way handshake for a turn."""
+        """
+        RFC 4.0: 4-Way Handshake Implementation.
+        Sequence: ATTACK -> DEFENSE -> CALCULATION -> CONFIRM.
+        """
         move_name = boost_msg if is_boost else move[0]
         power = 0 if is_boost else move[1]
         category = "Status" if is_boost else move[2]
         m_type = "normal" if is_boost else move[3]
 
-        # STEP 1: Announce
+        # STEP 1: RFC 4.5 Attack Announce
         print(f"[RFC] Sending ATTACK_ANNOUNCE...")
         self.net.send_reliable(
             "ATTACK_ANNOUNCE",
@@ -439,10 +433,10 @@ class P2PGame:
             },
         )
 
-        # STEP 2: Wait for Defense
+        # STEP 2: RFC 4.6 Defense Announce (Wait)
         self.wait_for_packet(["DEFENSE_ANNOUNCE"])
 
-        # STEP 3: Calculate & Report
+        # STEP 3: RFC 4.7 Calculation Report
         if is_boost:
             dmg, eff = 0, 1.0
             status_msg = f"{self.my_pokemon.name} {boost_msg}"
@@ -468,10 +462,9 @@ class P2PGame:
             },
         )
 
-        # STEP 4: Confirm
+        # STEP 4: RFC 4.8 Calculation Confirm (Wait)
         self.wait_for_packet(["CALCULATION_CONFIRM"])
 
-        # Finalize State
         self.opp_pokemon["hp"] = new_opp_hp
         print(f"[Result] Opponent HP: {self.opp_pokemon['hp']}")
 
@@ -491,30 +484,28 @@ class P2PGame:
         self.turn_owner = "opp"
 
     def play_opp_turn(self):
-        """Handles the logic when it's the opponent's turn."""
         print(f"\n[Opponent Turn] Waiting...")
+        # STEP 1: Wait for Attack
         msg_type, payload = self.wait_for_packet(["ATTACK_ANNOUNCE", "GAME_OVER"])
         if msg_type == "GAME_OVER":
             self.check_game_over()
             return
-
         print(f"[RFC] Opponent declared: {payload['move_name']}")
 
-        # Send Defense Announce
+        # STEP 2: Send Defense
         self.net.send_reliable(
             "DEFENSE_ANNOUNCE", {"hp": self.my_pokemon.hp, "status": "ready"}
         )
 
-        # Wait for Report
+        # STEP 3: Wait for Report
         msg_type, payload = self.wait_for_packet(["CALCULATION_REPORT"])
-
         damage = int(payload["damage_dealt"])
         status_msg = payload.get("status_message", "")
-
         print(f"\n**********************************************")
         print(f"BATTLE EVENT: {status_msg}")
         print(f"**********************************************\n")
 
+        # STEP 4: Send Confirm
         self.pending_damage = damage
         self.net.send_reliable("CALCULATION_CONFIRM", {})
 
@@ -527,7 +518,6 @@ class P2PGame:
         self.turn_owner = "me"
 
     def wait_for_packet(self, expected_types):
-        """Blocks until a specific packet type is received, handling chat in the meantime."""
         while self.running:
             user_in = self.input_handler.get_input()
             if user_in:
@@ -544,7 +534,7 @@ class P2PGame:
         return None, None
 
     def handle_message(self, msg_type, payload, addr):
-        """Callback for incoming network messages."""
+        # RFC 3.1: 3-Way Handshake
         if msg_type == "HANDSHAKE_REQUEST":
             self.net.set_peer(addr[0], addr[1])
             self.net.send_reliable("HANDSHAKE_RESPONSE", {"seed": 12345})
@@ -574,4 +564,10 @@ class P2PGame:
 
 if __name__ == "__main__":
     game = P2PGame()
-    game.start()
+    try:
+        game.start()
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    finally:
+        # Prevent race condition between input thread and input()
+        game.wait_for_exit()

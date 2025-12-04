@@ -5,20 +5,28 @@ import time
 # Use relative import for package internal reference
 from .protocol import PokeProtocol
 
-# Configuration for the reliability layer
-RETRY_DELAY = 0.5  # 500ms timeout before retransmission
-MAX_RETRIES = 3  # Maximum attempts before giving up
-BUFFER_SIZE = 65535  # Max UDP size to support sticker images
-DISCOVERY_PORT = 8890  # Dedicated port for LAN broadcast
+# RFC 3.2: Reliability Layer Configuration
+# "The recommended timeout is 500 milliseconds, and the recommended maximum number of retries is 3."
+RETRY_DELAY = 0.5  # 500ms timeout
+MAX_RETRIES = 3  # Retry limit
+
+# RFC Abstract: Sticker Support
+# Buffer size increased to ~64KB to accommodate Base64 encoded images.
+BUFFER_SIZE = 65535
+
+# RFC Abstract: Broadcast Mode
+# Dedicated port for LAN discovery packets.
+DISCOVERY_PORT = 8890
 
 
 class ReliableTransport:
     """
-    A wrapper around UDP sockets that implements a custom reliability layer.
-    Handles Sequence Numbers, ACKs, and Retransmissions.
+    Implements a reliable messaging layer over UDP as specified in RFC Section 3.
+    Features include Sequence Numbers, Acknowledgements (ACKs), and Retransmission.
     """
 
     def __init__(self, port=0, verbose=False):
+        # RFC Abstract: Transport Layer must use UDP.
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # Allow reusing the address to prevent 'Address already in use' errors
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -34,9 +42,12 @@ class ReliableTransport:
         self.verbose = verbose
         self.running = True
 
-        # Reliability state tracking
+        # RFC 3.2: Sequence Numbering
+        # "Every non-ACK message MUST include a sequence_number."
         self.seq_num = 0  # Monotonic sequence number for outgoing messages
-        self.unacked_msgs = {}  # Buffer for messages waiting for ACK
+
+        # Buffer for tracking unacknowledged messages for retransmission
+        self.unacked_msgs = {}
         self.lock = threading.Lock()  # Thread safety for message buffer
         self.on_message = None  # Callback function for received messages
 
@@ -57,14 +68,14 @@ class ReliableTransport:
 
     def send_reliable(self, msg_type, payload):
         """
-        Sends a message with reliability guarantees.
+        Sends a message with reliability guarantees (RFC 3.2).
         Assigns a sequence number and stores it for potential retransmission.
         """
         with self.lock:
             seq = self.seq_num
             self.seq_num += 1
 
-            # Inject sequence number into payload for tracking
+            # RFC 3.2: Inject sequence number into payload for tracking
             payload["sequence_number"] = seq
 
             data = PokeProtocol.serialize(msg_type, payload)
@@ -87,7 +98,10 @@ class ReliableTransport:
                 print(f"[Sent] {msg_type} (Seq: {seq})")
 
     def send_ack(self, seq_to_ack, addr):
-        """Sends a lightweight ACK packet to confirm receipt."""
+        """
+        RFC 3.2: Acknowledgements.
+        "Upon receiving a message... the peer MUST send an ACK message."
+        """
         ack_payload = {"sequence_number": seq_to_ack}
         data = PokeProtocol.serialize("ACK", ack_payload)
         self.sock.sendto(data, addr)
@@ -107,17 +121,19 @@ class ReliableTransport:
                 if not msg_type:
                     continue
 
-                # Handle ACKs internally - remove from retry buffer
+                # RFC 3.2: Handling Incoming ACKs
                 if msg_type == "ACK":
                     seq_acked = int(payload.get("sequence_number", -1))
                     with self.lock:
                         if seq_acked in self.unacked_msgs:
                             if self.verbose:
                                 print(f"[Ack] Received ACK for Seq {seq_acked}")
+                            # Remove from buffer -> Stop retransmitting
                             del self.unacked_msgs[seq_acked]
                     continue
 
-                # Automatically send ACK for any received reliable message
+                # RFC 3.2: Handling Incoming Reliable Messages
+                # Automatically respond with an ACK before processing
                 sender_seq = payload.get("sequence_number")
                 if sender_seq is not None:
                     self.send_ack(sender_seq, addr)
@@ -132,8 +148,8 @@ class ReliableTransport:
 
     def _retry_loop(self):
         """
-        Background thread loop for reliability.
-        Checks for unacknowledged messages that have exceeded the timeout.
+        RFC 3.2: Retransmission Logic.
+        Checks for timeouts (500ms) and resends messages up to 3 times.
         """
         while self.running:
             time.sleep(0.1)  # Check every 100ms
@@ -148,6 +164,7 @@ class ReliableTransport:
                             info["time"] = now
                             self._send_raw(info["data"])
                         else:
+                            # RFC 3.2: "If max retries reached... assume connection lost."
                             print(
                                 f"[Timeout] Failed to deliver {info['type']} (Seq {seq})"
                             )
@@ -155,7 +172,10 @@ class ReliableTransport:
 
 
 class DiscoveryManager:
-    """Handles UDP Broadcast for finding local games without needing IPs."""
+    """
+    Implements RFC Abstract: Broadcast Mode.
+    Allows peers to announce presence on the local network.
+    """
 
     def __init__(self, game_port=8888):
         self.game_port = game_port
