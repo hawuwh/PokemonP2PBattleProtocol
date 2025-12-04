@@ -57,39 +57,11 @@ This project implements the PokeProtocol (RFC Specification) using Python and UD
 ### Contribution
 This project was created with the help of Gemini AI, which assisted in debugging, troubleshooting, and implementing the game logic.
 
-  -----------------------------------------------------------------------
-  Member             Key Responsibilities
-  ------------------ ----------------------------------------------------
-  **Caesar, Kyeeona  • Generated the initial project code template in
-  Nickolae V.**      Python`<br>`{=html}• Implemented the **handshaking
-                     process** and role assignment (Host goes first,
-                     Joiner second)`<br>`{=html}• Built the
-                     **build_statements** for proper message
-                     display`<br>`{=html}• Implemented the **chat
-                     messaging system**`<br>`{=html}• Established
-                     **spectator mode**`<br>`{=html}• Performed extensive
-                     **testing** and **general Python code
-                     modifications**
-
-  **Cruz, Richman    • Loaded and parsed **CSV data** in
-  Justin**           Python`<br>`{=html}• Implemented all **18 Pokémon
-                     type matchups** in Python data
-                     structures`<br>`{=html}• Developed the **type
-                     effectiveness mechanics**`<br>`{=html}• Conducted
-                     **late-stage testing** and fixed remaining
-                     inconsistencies
-
-  **Paclijan, Howard • Implemented the **reliability layer** (ACK sending
-  Gabriel**          and sequence verification)`<br>`{=html}• Developed
-                     **message parsing** for attack, defense, and
-                     calculation reports`<br>`{=html}• Implemented
-                     **deterministic damage calculation** using shared
-                     seeds, stats, and move data`<br>`{=html}• Built a
-                     **Linear Congruential Generator (LCG)** for
-                     synchronized randomness`<br>`{=html}• Designed the
-                     **discrepancy resolution protocol** to detect and
-                     correct mismatches between peers
-  -----------------------------------------------------------------------
+| Group Member                | Contribution                                                                                                                                                                                                                                                                                                                                                                                                   |
+|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Caesar, Kyeeona Nickolae V. | Generated the initial project code template in Python; Implemented the handshaking process and role assignment (Host goes first, Joiner second); Built the build_statements for proper message display; Implemented the chat messaging system; Established spectator mode; Performed extensive testing and general Python code modifications                                                                   |
+| Cruz, Richman Justin        | Loaded and parsed CSV data in Python; Implemented all 18 Pokémon type matchups in Python data structures; Developed the type effectiveness mechanics; Conducted late-stage testing and fixed remaining inconsistencies                                                                                                                                                                                         |
+| Paclijan, Howard Gabriel    | Implemented the reliability layer (ACK sending and sequence verification); Developed message parsing for attack, defense, and calculation reports; Implemented deterministic damage calculation using shared seeds, stats, and move data; Built a Linear Congruential Generator (LCG) for synchronized randomness; Designed the discrepancy resolution protocol to detect and correct mismatches between peers |
 
 ### Sticker preset
 Credits to [mira x33](https://emoji.gg/pack/53103-pikapika-pokemon-emojis#) for the stickers
