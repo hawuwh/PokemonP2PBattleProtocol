@@ -83,7 +83,9 @@ class P2PGame:
                     print("Invalid choice.")
             time.sleep(0.1)
 
-        print("\n[Tip] Type '/chat <msg>' or '/sticker <file>' anytime.")
+        print(
+            "\n[Tip] Type '/chat <message>' to chat or '/sticker <path/to/file>' to send a sticker. Preset stickers are available in the 'stickers/' folder."
+        )
 
         while self.running:
             try:
